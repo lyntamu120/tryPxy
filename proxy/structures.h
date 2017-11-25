@@ -236,12 +236,13 @@ void cacheHTTPRequest(char *url, char *host, char *doc) {
     }
 }
 
-void parseHostAndDoc(char *buf, char *doc, char *host) {
-
+//parse the url into doc and host
+//host: www.tamu.edu, doc: index.html
+void parseHostAndDoc(char *url, char *doc, char *host) {
     char delim[] = "/";
     char *token;
     int i = 1;
-    for(token = strtok(buf, delim); token != NULL; token = strtok(NULL, delim)) {
+    for(token = strtok(url, delim); token != NULL; token = strtok(NULL, delim)) {
         // printf("%s\n", token);
         if (i == 1) {
             strcpy(host, token);
@@ -250,10 +251,9 @@ void parseHostAndDoc(char *buf, char *doc, char *host) {
         }
         i++;
     }
-    // printf("%s\n", doc);
-    // printf("%s\n", host);
 }
 
+//send spacifc file to the client
 void sendFileToClient(int new_fd, char *doc) {
     FILE *file;
     size_t nread;

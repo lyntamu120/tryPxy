@@ -1,6 +1,3 @@
-/*
-** client.c -- a stream socket client demo
-*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -70,7 +67,7 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    fp = fopen ("file.txt", "w+");
+    fp = fopen("file.txt", "w+");
 
     while (1) {
         numbytes = recv(sockfd, buf, sizeof buf, 0);
@@ -83,10 +80,9 @@ int main(int argc, char *argv[]) {
             break;
         } else {
             fprintf(fp, "%s", buf);
+            printf("Client: %d bytes have been written\n", numbytes);
         }
     }
-
-    printf("client: sended '%s'\n", message);
     close(sockfd);
     return 0;
 }

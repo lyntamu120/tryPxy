@@ -19,9 +19,11 @@
 
 struct Pages cache[MAXNUMOFCACHE];
 int numOfFile = 0;
+fd_set clientDescriptors;
+fd_set allDescriptors;
 
 int main(void) {
-    int sockfd, new_fd; // listen on sock_fd, new connection on new_fd
+    int sockfd, new_fd, maxDescriptors, selectVal; // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *servinfo, *p, *res;
     struct sockaddr_storage their_addr; // connector's address information
     socklen_t sin_size;
@@ -32,6 +34,7 @@ int main(void) {
     void *addr;
     char buf[2056], doc[512], host[512];
     int byte_count;
+    int i;
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;
@@ -87,45 +90,65 @@ int main(void) {
     }
     printf("server: waiting for connections on %s...\n", s);
 
-    while(1) { // main accept() loop
-        printf("At the beginning of the while, current size of the cache is: %d\n", numOfFile);
-        sin_size = sizeof their_addr;
-        new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
-        // printf("The newsockfd from server is: %d\n", new_fd);
+    //clear the sets
+	FD_ZERO(&clientDescriptors);
+	FD_ZERO(&allDescriptors);
 
-        if (new_fd == -1) {
-            perror("accept");
-            continue;
+	FD_SET(sockfd, &allDescriptors);
+	maxDescriptors = sockfd;
+	printf("the # of descriptors are: %d\n", maxDescriptors);
+
+    while(1) {
+        clientDescriptors = allDescriptors;
+        //If select succeeds, it returns the number of ready socket descriptors.
+        selectVal = select(maxDescriptors + 1, &clientDescriptors, NULL, NULL, NULL);
+        if(selectVal == -1) {
+            printf("ERROR: Select failed for input descriptors.\n");
+            return -1;
         }
-        inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *)&their_addr), s, sizeof s);
-        printf("server: got connection from %s\n", s);
-        printf("current size of the cache is: %d\n", numOfFile);
 
-        if (!fork()) { // this is the child process
-            close(sockfd); // child doesn't need the listener
-            if (recv(new_fd, buf, sizeof buf, 0) == -1) {
-                perror("send");
-            }
-            printf("%s\n", buf);
+        for(i = 0; i <= maxDescriptors; i++) {
+            //Check which descriptor is in the set.
+            if(FD_ISSET(i, &clientDescriptors)) {
+                if(i == sockfd) {
+                    // client connecting
+                    sin_size = sizeof their_addr;
+                    new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
+                    if(new_fd == -1) {
+                        printf("ERROR: Fail to connect to the client.\n");
+                    } else {
+                        inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *)&their_addr), s, sizeof s);
+                        printf("server: got connection from %s\n", s);
 
-            parseHostAndDoc(&buf[0], &doc[0], &host[0]);
-            printf("%s\n", doc);
-            printf("%s\n", host);
-            int docInCache = findInCache(&buf[0]);
-            if (docInCache == -1) {
-                //cache doesn't contain the doc
-                cacheHTTPRequest(&buf[0], &host[0], &doc[0]);
-            } else {
-                printf("%s\n", "Containing the file!");
-                //cache contains the doc
-                update(docInCache);
+                        FD_SET(new_fd, &allDescriptors);
+                        if(new_fd >= maxDescriptors) {
+                            maxDescriptors = new_fd;
+                        }
+                    }
+                } else {
+                    //client sending GET request
+                    if (recv(i, buf, sizeof buf, 0) == -1) {
+                        perror("send");
+                    }
+                    printf("%s\n", buf);
+
+                    parseHostAndDoc(&buf[0], &doc[0], &host[0]);
+                    printf("%s\n", doc);
+                    printf("%s\n", host);
+                    int docInCache = findInCache(&buf[0]);
+                    if (docInCache == -1) {
+                        //cache doesn't contain the doc
+                        cacheHTTPRequest(&buf[0], &host[0], &doc[0]);
+                    } else {
+                        printf("%s\n", "Cache contains the file!");
+                        //cache contains the doc
+                        update(docInCache);
+                    }
+                    sendFileToClient(i, &doc[0]);
+                    printf("current size of the cache is: %d\n", numOfFile);
+                }
             }
-            sendFileToClient(new_fd, &doc[0]);
-            printf("Inside fork, current size of the cache is: %d\n", numOfFile);
-            close(new_fd);
-            exit(0);
         }
-        close(new_fd); // parent doesn't need this
     }
     return 0;
 }
